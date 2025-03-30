@@ -14,6 +14,7 @@ st.title("Experiment Success Dashboard")
 # Backend File Upload (Assumed to be fixed)
 uploaded_file = "1MG_Test_and_control_report_transformed (2).csv"  # Replace with actual backend file path
 
+
 df = pd.read_csv(uploaded_file, parse_dates=['date'])
 
 # Ensure necessary columns exist
@@ -31,9 +32,19 @@ df['transactors_per_audience'] = df['transactors'] / df['audience_size']
 # Define control group
 control_group = "Control Set"
 
+# Test start dates
+test_start_dates = {
+    "resp": pd.Timestamp("2025-03-05"),
+    "cardiac": pd.Timestamp("2025-03-18"),
+    "diabetes": pd.Timestamp("2025-03-06"),
+    "derma": pd.Timestamp("2025-03-18")
+}
+
 # Cohort selection
 selected_cohort = st.sidebar.selectbox("Select Cohort", df['cohort'].unique())
-df_filtered = df[df['cohort'] == selected_cohort]
+st.sidebar.write(f"Test Start Date: {test_start_dates.get(selected_cohort, 'Unknown')}")
+
+df_filtered = df[(df['cohort'] == selected_cohort) & (df['date'] >= test_start_dates.get(selected_cohort, df['date'].min()))]
 
 test_groups = [g for g in df_filtered['data_set'].unique() if g != control_group]
 
@@ -48,17 +59,18 @@ metrics = ['gmv_per_audience', 'app_opens_per_audience', 'orders_per_audience', 
 st.write("### Metric Trends: Control vs Test Groups")
 for metric in metrics:
     fig = px.line(df_filtered, x='date', y=metric, color='data_set', title=metric.replace("_", " ").title())
+    fig.update_traces(connectgaps=False)  # Fix line connection issue
     st.plotly_chart(fig, use_container_width=True)
 
 # Prepare results table
 all_results = []
 summary_results = []
 
-test_start_dates = {tg: df_filtered[df_filtered['data_set'] == tg]['date'].min() for tg in test_groups}
+test_start_dates_actual = {tg: df_filtered[df_filtered['data_set'] == tg]['date'].min() for tg in test_groups}
 
 # Iterate over test groups
 for test_group in test_groups:
-    first_test_date = test_start_dates[test_group]
+    first_test_date = test_start_dates_actual[test_group]
     
     for metric in metrics:
         df_control = df_filtered[(df_filtered['data_set'] == control_group) & (df_filtered['date'] >= first_test_date)].groupby('date')[metric].mean()
