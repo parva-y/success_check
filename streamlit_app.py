@@ -38,7 +38,7 @@ control_group = "Control Set"
 test_start_dates = {
     "resp": pd.Timestamp("2025-03-05"),
     "cardiac": pd.Timestamp("2025-03-18"),
-    "diabetes": pd.Timestamp("2025-03-06"),
+    "diabetic": pd.Timestamp("2025-03-06"),
     "derma": pd.Timestamp("2025-03-18")
 }
 
@@ -62,7 +62,7 @@ st.write("### Metric Trends: Control vs Test Groups")
 for metric in metrics:
     fig = px.line(df_filtered, x='date', y=metric, color='data_set', title=metric.replace("_", " ").title())
     fig.update_traces(connectgaps=False)  # Fix line connection issue
-    fig.update_xaxes(type='category')  # Ensure dates are displayed correctly
+    fig.update_xaxes(type='category', tickformat="%d/%m")  # Ensure dates are displayed correctly without timestamp
     st.plotly_chart(fig, use_container_width=True)
 
 # Prepare results table
