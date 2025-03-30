@@ -5,6 +5,7 @@ import numpy as np
 from statsmodels.stats.weightstats import ztest
 from scipy.stats import ks_2samp
 import ruptures as rpt
+import statsmodels.api as sm
 
 st.title("Experiment Success Checker")
 
@@ -29,6 +30,17 @@ if uploaded_file is not None:
         # Define control group
         control_group = "Control Set"
         
+        # Allow user to manually select test start dates
+        test_start_dates = {}
+        for cohort in df['cohort'].unique():
+            df_filtered = df[df['cohort'] == cohort]
+            test_groups = df_filtered['data_set'].unique()
+            for test_group in test_groups:
+                if test_group == control_group:
+                    continue
+                min_date = df_filtered[df_filtered['data_set'] == test_group]['date'].min()
+                test_start_dates[test_group] = st.date_input(f"Select start date for {test_group} in {cohort}", min_date)
+        
         # Prepare results table
         all_results = []
         summary_results = []
@@ -40,13 +52,11 @@ if uploaded_file is not None:
             if control_group not in test_groups:
                 continue  # Skip if no control group exists
             
-            experiment_start_dates = {}
             for test_group in test_groups:
                 if test_group == control_group:
                     continue
                 
-                first_test_date = df_filtered[df_filtered['data_set'] == test_group]['date'].min()
-                experiment_start_dates[test_group] = first_test_date
+                first_test_date = pd.to_datetime(test_start_dates[test_group])
                 
                 for metric in ['gmv_per_audience', 'app_opens_per_audience', 'orders_per_audience', 'transactors_per_audience']:
                     df_control = df_filtered[(df_filtered['data_set'] == control_group) & (df_filtered['date'] >= first_test_date)].groupby('date')[metric].mean()
@@ -65,13 +75,29 @@ if uploaded_file is not None:
                     algo = rpt.Pelt(model="l2").fit(control_values.values - test_values.values)
                     change_points = algo.predict(pen=1)
                     
+                    # CUSUM test for detecting shifts
+                    cusum_control = np.cumsum(control_values - np.mean(control_values))
+                    cusum_test = np.cumsum(test_values - np.mean(test_values))
+                    cusum_diff = np.abs(cusum_control - cusum_test).max()
+                    
+                    # Rolling mean variance comparison
+                    rolling_diff = (test_values.rolling(3).mean() - control_values.rolling(3).mean()).dropna().abs().mean()
+                    
+                    # ARIMA Residual Analysis
+                    arima_control = sm.tsa.ARIMA(control_values, order=(1,1,1)).fit()
+                    arima_test = sm.tsa.ARIMA(test_values, order=(1,1,1)).fit()
+                    residual_diff = np.abs(arima_control.resid - arima_test.resid).mean()
+                    
                     # Store results
                     tests = [
                         ("Paired t-test", t_stat, p_value_ttest),
                         ("Mann-Whitney U Test", u_stat, p_value_mw),
                         ("Z-Test", z_stat, p_value_ztest),
                         ("Kolmogorov-Smirnov Test", ks_stat, p_value_ks),
-                        ("Change Point Detection", len(change_points)-1, np.nan)  # Use np.nan for non-numeric values
+                        ("Change Point Detection", len(change_points)-1, np.nan),
+                        ("CUSUM Test", cusum_diff, np.nan),
+                        ("Rolling Mean Difference", rolling_diff, np.nan),
+                        ("ARIMA Residual Difference", residual_diff, np.nan)
                     ]
                     
                     for test_name, stat, p_value in tests:
