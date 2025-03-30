@@ -16,6 +16,10 @@ if uploaded_file is not None:
     st.write("Data Preview:")
     st.write(df.head())
     
+    # Option to check the complete dataset
+    if st.checkbox("Show complete dataset"):
+        st.write(df)
+    
     # Ensure necessary columns exist
     required_columns = {'date', 'data_set', 'audience_size', 'app_opens', 'transactors', 'orders', 'gmv', 'cohort'}
     if not required_columns.issubset(df.columns):
