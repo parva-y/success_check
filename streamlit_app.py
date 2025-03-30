@@ -62,7 +62,7 @@ st.write("### Metric Trends: Control vs Test Groups")
 for metric in metrics:
     fig = px.line(df_filtered, x='date', y=metric, color='data_set', title=metric.replace("_", " ").title())
     fig.update_traces(connectgaps=False)  # Fix line connection issue
-    fig.update_xaxes(type='category', tickformat="%d/%m")  # Ensure dates are displayed correctly without timestamp
+    fig.update_xaxes(tickformat="%d/%m")  # Ensure dates are displayed correctly without timestamp
     st.plotly_chart(fig, use_container_width=True)
 
 # Prepare results table
