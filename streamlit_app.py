@@ -14,7 +14,6 @@ st.title("Experiment Success Dashboard")
 # Backend File Upload (Assumed to be fixed)
 uploaded_file = "1MG_Test_and_control_report_transformed (2).csv"  # Replace with actual backend file path
 
-
 df = pd.read_csv(uploaded_file, parse_dates=['date'])
 
 # Ensure necessary columns exist
@@ -22,6 +21,9 @@ required_columns = {'date', 'data_set', 'audience_size', 'app_opens', 'transacto
 if not required_columns.issubset(df.columns):
     st.write("Missing required columns in the CSV file.")
     st.stop()
+
+# Sort data by date
+df = df.sort_values(by='date')
 
 # Calculate metrics
 df['gmv_per_audience'] = df['gmv'] / df['audience_size']
@@ -60,6 +62,7 @@ st.write("### Metric Trends: Control vs Test Groups")
 for metric in metrics:
     fig = px.line(df_filtered, x='date', y=metric, color='data_set', title=metric.replace("_", " ").title())
     fig.update_traces(connectgaps=False)  # Fix line connection issue
+    fig.update_xaxes(type='category')  # Ensure dates are displayed correctly
     st.plotly_chart(fig, use_container_width=True)
 
 # Prepare results table
@@ -85,25 +88,12 @@ for test_group in test_groups:
         u_stat, p_value_mw = stats.mannwhitneyu(control_values, test_values, alternative='two-sided')
         z_stat, p_value_ztest = ztest(control_values, test_values)
         ks_stat, p_value_ks = ks_2samp(control_values, test_values)
-        algo = rpt.Pelt(model="l2").fit(control_values.values - test_values.values)
-        change_points = algo.predict(pen=1)
-        cusum_control = np.cumsum(control_values - np.mean(control_values))
-        cusum_test = np.cumsum(test_values - np.mean(test_values))
-        cusum_diff = np.abs(cusum_control - cusum_test).max()
-        rolling_diff = (test_values.rolling(3).mean() - control_values.rolling(3).mean()).dropna().abs().mean()
-        arima_control = sm.tsa.ARIMA(control_values, order=(1,1,1)).fit()
-        arima_test = sm.tsa.ARIMA(test_values, order=(1,1,1)).fit()
-        residual_diff = np.abs(arima_control.resid - arima_test.resid).mean()
         
         tests = [
             ("Paired t-test", t_stat, p_value_ttest),
             ("Mann-Whitney U Test", u_stat, p_value_mw),
             ("Z-Test", z_stat, p_value_ztest),
-            ("Kolmogorov-Smirnov Test", ks_stat, p_value_ks),
-            ("Change Point Detection", len(change_points)-1, np.nan),
-            ("CUSUM Test", cusum_diff, np.nan),
-            ("Rolling Mean Difference", rolling_diff, np.nan),
-            ("ARIMA Residual Difference", residual_diff, np.nan)
+            ("Kolmogorov-Smirnov Test", ks_stat, p_value_ks)
         ]
         
         for test_name, stat, p_value in tests:
