@@ -40,8 +40,8 @@ if uploaded_file is not None:
             metric_options = ['gmv_per_audience', 'app_opens_per_audience', 'orders_per_audience', 'transactors_per_audience']
             selected_metric = st.selectbox("Select Metric", metric_options)
             
-            df_control = df_filtered[df_filtered['data_set'] == control_group].set_index('date')[selected_metric]
-            df_test = df_filtered[df_filtered['data_set'] == test_group].set_index('date')[selected_metric]
+            df_control = df_filtered[df_filtered['data_set'] == control_group].groupby('date')[selected_metric].mean()
+            df_test = df_filtered[df_filtered['data_set'] == test_group].groupby('date')[selected_metric].mean()
             
             # Align dates for paired testing
             df_combined = pd.concat([df_control, df_test], axis=1, keys=[control_group, test_group]).dropna()
