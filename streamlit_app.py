@@ -49,24 +49,27 @@ if uploaded_file is not None:
             test_values = df_combined[test_group]
             
             # Perform statistical tests
-            results = {}
+            results = []
             
             # 1. Paired t-test (if data is normally distributed)
             t_stat, p_value_ttest = stats.ttest_rel(control_values, test_values)
-            results["Paired t-test"] = (t_stat, p_value_ttest)
+            results.append(["Paired t-test", t_stat, p_value_ttest])
             
             # 2. Mann-Whitney U Test (if data is non-normal)
             u_stat, p_value_mw = stats.mannwhitneyu(control_values, test_values, alternative='two-sided')
-            results["Mann-Whitney U Test"] = (u_stat, p_value_mw)
+            results.append(["Mann-Whitney U Test", u_stat, p_value_mw])
             
-            # Display results
+            # Display results in a structured format
             st.write(f"### {selected_metric.replace('_', ' ').title()} Comparison")
-            st.write(f"Control Mean: {control_values.mean():.4f}")
-            st.write(f"Test Mean: {test_values.mean():.4f}")
+            st.write(f"**Control Mean:** {control_values.mean():.4f}")
+            st.write(f"**Test Mean:** {test_values.mean():.4f}")
             
-            for test_name, (stat, p_val) in results.items():
-                st.write(f"**{test_name}**")
-                st.write(f"Statistic: {stat:.4f}, P-Value: {p_val:.4f}")
+            st.write("### Statistical Test Results")
+            results_df = pd.DataFrame(results, columns=["Test", "Statistic", "P-Value"])
+            st.dataframe(results_df)
+            
+            # Interpretation of results
+            for test_name, stat, p_val in results:
                 if p_val < 0.05:
                     st.success(f"{test_name}: Statistically Significant Difference Detected! 🚀")
                 else:
