@@ -23,54 +23,44 @@ if uploaded_file is not None:
         df['orders_per_audience'] = df['orders'] / df['audience_size']
         df['transactors_per_audience'] = df['transactors'] / df['audience_size']
         
-        # Select cohort
-        cohort_options = df['cohort'].unique()
-        selected_cohort = st.selectbox("Select Cohort", cohort_options)
-        df_filtered = df[df['cohort'] == selected_cohort]
+        # Define control group
+        control_group = "Control Set"
         
-        # Identify control and test groups
-        data_sets = df_filtered['data_set'].unique()
-        if len(data_sets) != 2:
-            st.write("Error: Exactly two data sets (Control & Test) are required for comparison.")
-        else:
-            control_group = st.selectbox("Select Control Group", data_sets)
-            test_group = [ds for ds in data_sets if ds != control_group][0]
+        # Prepare results table
+        all_results = []
+        
+        # Iterate over all cohorts and test groups
+        for cohort in df['cohort'].unique():
+            df_filtered = df[df['cohort'] == cohort]
+            test_groups = df_filtered['data_set'].unique()
+            if control_group not in test_groups:
+                continue  # Skip if no control group exists
             
-            # Select metric to analyze
-            metric_options = ['gmv_per_audience', 'app_opens_per_audience', 'orders_per_audience', 'transactors_per_audience']
-            selected_metric = st.selectbox("Select Metric", metric_options)
-            
-            df_control = df_filtered[df_filtered['data_set'] == control_group].groupby('date')[selected_metric].mean()
-            df_test = df_filtered[df_filtered['data_set'] == test_group].groupby('date')[selected_metric].mean()
-            
-            # Align dates for paired testing
-            df_combined = pd.concat([df_control, df_test], axis=1, keys=[control_group, test_group]).dropna()
-            control_values = df_combined[control_group]
-            test_values = df_combined[test_group]
-            
-            # Perform statistical tests
-            results = []
-            
-            # 1. Paired t-test (if data is normally distributed)
-            t_stat, p_value_ttest = stats.ttest_rel(control_values, test_values)
-            results.append(["Paired t-test", t_stat, p_value_ttest])
-            
-            # 2. Mann-Whitney U Test (if data is non-normal)
-            u_stat, p_value_mw = stats.mannwhitneyu(control_values, test_values, alternative='two-sided')
-            results.append(["Mann-Whitney U Test", u_stat, p_value_mw])
-            
-            # Display results in a structured format
-            st.write(f"### {selected_metric.replace('_', ' ').title()} Comparison")
-            st.write(f"**Control Mean:** {control_values.mean():.4f}")
-            st.write(f"**Test Mean:** {test_values.mean():.4f}")
-            
-            st.write("### Statistical Test Results")
-            results_df = pd.DataFrame(results, columns=["Test", "Statistic", "P-Value"])
+            for test_group in test_groups:
+                if test_group == control_group:
+                    continue
+                
+                for metric in ['gmv_per_audience', 'app_opens_per_audience', 'orders_per_audience', 'transactors_per_audience']:
+                    df_control = df_filtered[df_filtered['data_set'] == control_group].groupby('date')[metric].mean()
+                    df_test = df_filtered[df_filtered['data_set'] == test_group].groupby('date')[metric].mean()
+                    
+                    # Align dates for paired testing
+                    df_combined = pd.concat([df_control, df_test], axis=1, keys=[control_group, test_group]).dropna()
+                    control_values = df_combined[control_group]
+                    test_values = df_combined[test_group]
+                    
+                    # Perform statistical tests
+                    t_stat, p_value_ttest = stats.ttest_rel(control_values, test_values)
+                    u_stat, p_value_mw = stats.mannwhitneyu(control_values, test_values, alternative='two-sided')
+                    
+                    # Append results
+                    all_results.append([cohort, test_group, metric, control_values.mean(), test_values.mean(), "Paired t-test", t_stat, p_value_ttest])
+                    all_results.append([cohort, test_group, metric, control_values.mean(), test_values.mean(), "Mann-Whitney U Test", u_stat, p_value_mw])
+        
+        # Display results
+        if all_results:
+            results_df = pd.DataFrame(all_results, columns=["Cohort", "Test Group", "Metric", "Control Mean", "Test Mean", "Test", "Statistic", "P-Value"])
+            st.write("### Experiment Results Table")
             st.dataframe(results_df)
-            
-            # Interpretation of results
-            for test_name, stat, p_val in results:
-                if p_val < 0.05:
-                    st.success(f"{test_name}: Statistically Significant Difference Detected! 🚀")
-                else:
-                    st.info(f"{test_name}: No Significant Difference Detected.")
+        else:
+            st.write("No valid test-control comparisons found.")
