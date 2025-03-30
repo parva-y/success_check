@@ -40,13 +40,17 @@ if uploaded_file is not None:
             if control_group not in test_groups:
                 continue  # Skip if no control group exists
             
+            experiment_start_dates = {}
             for test_group in test_groups:
                 if test_group == control_group:
                     continue
                 
+                first_test_date = df_filtered[df_filtered['data_set'] == test_group]['date'].min()
+                experiment_start_dates[test_group] = first_test_date
+                
                 for metric in ['gmv_per_audience', 'app_opens_per_audience', 'orders_per_audience', 'transactors_per_audience']:
-                    df_control = df_filtered[df_filtered['data_set'] == control_group].groupby('date')[metric].mean()
-                    df_test = df_filtered[df_filtered['data_set'] == test_group].groupby('date')[metric].mean()
+                    df_control = df_filtered[(df_filtered['data_set'] == control_group) & (df_filtered['date'] >= first_test_date)].groupby('date')[metric].mean()
+                    df_test = df_filtered[(df_filtered['data_set'] == test_group) & (df_filtered['date'] >= first_test_date)].groupby('date')[metric].mean()
                     
                     # Align dates for paired testing
                     df_combined = pd.concat([df_control, df_test], axis=1, keys=[control_group, test_group]).dropna()
