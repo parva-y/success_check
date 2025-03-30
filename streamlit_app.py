@@ -2,6 +2,9 @@ import streamlit as st
 import pandas as pd
 import scipy.stats as stats
 import numpy as np
+from statsmodels.stats.weightstats import ztest
+from scipy.stats import ks_2samp
+import ruptures as rpt
 
 st.title("Experiment Success Checker")
 
@@ -28,6 +31,7 @@ if uploaded_file is not None:
         
         # Prepare results table
         all_results = []
+        summary_results = []
         
         # Iterate over all cohorts and test groups
         for cohort in df['cohort'].unique():
@@ -52,15 +56,27 @@ if uploaded_file is not None:
                     # Perform statistical tests
                     t_stat, p_value_ttest = stats.ttest_rel(control_values, test_values)
                     u_stat, p_value_mw = stats.mannwhitneyu(control_values, test_values, alternative='two-sided')
+                    z_stat, p_value_ztest = ztest(control_values, test_values)
+                    ks_stat, p_value_ks = ks_2samp(control_values, test_values)
+                    algo = rpt.Pelt(model="l2").fit(control_values.values - test_values.values)
+                    change_points = algo.predict(pen=1)
                     
-                    # Append results
-                    all_results.append([cohort, test_group, metric, control_values.mean(), test_values.mean(), "Paired t-test", t_stat, p_value_ttest])
-                    all_results.append([cohort, test_group, metric, control_values.mean(), test_values.mean(), "Mann-Whitney U Test", u_stat, p_value_mw])
+                    # Store results
+                    tests = [("Paired t-test", t_stat, p_value_ttest),
+                             ("Mann-Whitney U Test", u_stat, p_value_mw),
+                             ("Z-Test", z_stat, p_value_ztest),
+                             ("Kolmogorov-Smirnov Test", ks_stat, p_value_ks),
+                             ("Change Point Detection", len(change_points)-1, "N/A")]
+                    
+                    for test_name, stat, p_value in tests:
+                        significance = "Pass" if (p_value != "N/A" and p_value < 0.05) else "Fail"
+                        all_results.append([cohort, test_group, metric, control_values.mean(), test_values.mean(), test_name, stat, p_value])
+                        summary_results.append([cohort, test_name, significance])
         
-        # Display results
+        # Display detailed results
         if all_results:
             results_df = pd.DataFrame(all_results, columns=["Cohort", "Test Group", "Metric", "Control Mean", "Test Mean", "Test", "Statistic", "P-Value"])
-            st.write("### Experiment Results Table")
+            st.write("### Detailed Experiment Results Table")
             
             # Apply conditional formatting
             def highlight_significant(s):
@@ -70,3 +86,9 @@ if uploaded_file is not None:
             st.dataframe(styled_df)
         else:
             st.write("No valid test-control comparisons found.")
+        
+        # Display summary results
+        if summary_results:
+            summary_df = pd.DataFrame(summary_results, columns=["Cohort", "Test Name", "Pass/Fail"]).drop_duplicates()
+            st.write("### Summary Table")
+            st.dataframe(summary_df)
