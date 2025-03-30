@@ -42,6 +42,14 @@ test_start_dates = {
     "derma": pd.Timestamp("2025-03-18")
 }
 
+# Marked test dates
+test_marked_dates = {
+    "derma": ["2025-03-18", "2025-03-21", "2025-03-22", "2025-03-23", "2025-03-25", "2025-03-28", "2025-04-01", "2025-04-02", "2025-04-05", "2025-04-07", "2025-04-08", "2025-04-10", "2025-04-11"],
+    "diabetic": ["2025-03-06", "2025-03-07", "2025-03-11", "2025-03-13", "2025-03-15", "2025-03-19", "2025-03-23", "2025-03-25", "2025-03-29", "2025-04-01", "2025-04-03"],
+    "cardiac": ["2025-03-18", "2025-03-21", "2025-03-22", "2025-03-23", "2025-03-25", "2025-04-01", "2025-04-02", "2025-04-05", "2025-04-07", "2025-04-10", "2025-04-12", "2025-04-15", "2025-04-17"],
+    "resp": ["2025-03-05", "2025-03-08", "2025-03-12", "2025-03-15", "2025-03-17", "2025-03-19", "2025-03-23", "2025-03-27", "2025-03-30", "2025-04-02", "2025-04-04"]
+}
+
 # Cohort selection
 selected_cohort = st.sidebar.selectbox("Select Cohort", df['cohort'].unique())
 st.sidebar.write(f"Test Start Date: {test_start_dates.get(selected_cohort, 'Unknown')}")
@@ -62,12 +70,17 @@ st.write("### Metric Trends: Control vs Test Groups")
 for metric in metrics:
     fig = px.line(df_filtered, x='date', y=metric, color='data_set', title=metric.replace("_", " ").title())
     fig.update_traces(connectgaps=False)  # Fix line connection issue
-    fig.update_xaxes(tickformat="%d/%m")  # Ensure dates are displayed correctly without timestamp
+    fig.update_xaxes(type='category', tickformat="%d/%m")  # Ensure dates are displayed correctly without timestamp
+    
+    # Mark significant test dates
+    for mark_date in test_marked_dates.get(selected_cohort, []):
+        if mark_date in df_filtered['date'].astype(str).values:
+            fig.add_vline(x=mark_date, line_width=2, line_dash="dash", line_color="red")
+    
     st.plotly_chart(fig, use_container_width=True)
 
 # Prepare results table
 all_results = []
-summary_results = []
 
 test_start_dates_actual = {tg: df_filtered[df_filtered['data_set'] == tg]['date'].min() for tg in test_groups}
 
@@ -86,20 +99,16 @@ for test_group in test_groups:
         # Perform statistical tests
         t_stat, p_value_ttest = stats.ttest_rel(control_values, test_values)
         u_stat, p_value_mw = stats.mannwhitneyu(control_values, test_values, alternative='two-sided')
-        z_stat, p_value_ztest = ztest(control_values, test_values)
         ks_stat, p_value_ks = ks_2samp(control_values, test_values)
         
         tests = [
             ("Paired t-test", t_stat, p_value_ttest),
             ("Mann-Whitney U Test", u_stat, p_value_mw),
-            ("Z-Test", z_stat, p_value_ztest),
             ("Kolmogorov-Smirnov Test", ks_stat, p_value_ks)
         ]
         
         for test_name, stat, p_value in tests:
-            significance = "Pass" if (not pd.isna(p_value) and p_value < 0.05) else "Fail"
             all_results.append([selected_cohort, test_group, metric, control_values.mean(), test_values.mean(), test_name, stat, p_value])
-            summary_results.append([selected_cohort, test_name, significance])
 
 # Display detailed results
 st.write("### Detailed Experiment Results Table")
@@ -107,8 +116,3 @@ results_df = pd.DataFrame(all_results, columns=["Cohort", "Test Group", "Metric"
 
 styled_df = results_df.style.apply(lambda s: ['background-color: lightgreen' if (not pd.isna(v) and v < 0.05) else '' for v in s], subset=["P-Value"])
 st.dataframe(styled_df)
-
-# Display summary results
-st.write("### Summary Table")
-summary_df = pd.DataFrame(summary_results, columns=["Cohort", "Test Name", "Pass/Fail"]).drop_duplicates()
-st.dataframe(summary_df)
