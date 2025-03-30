@@ -61,6 +61,12 @@ if uploaded_file is not None:
         if all_results:
             results_df = pd.DataFrame(all_results, columns=["Cohort", "Test Group", "Metric", "Control Mean", "Test Mean", "Test", "Statistic", "P-Value"])
             st.write("### Experiment Results Table")
-            st.dataframe(results_df)
+            
+            # Apply conditional formatting
+            def highlight_significant(s):
+                return ['background-color: lightgreen' if v < 0.05 else '' for v in s]
+            
+            styled_df = results_df.style.apply(highlight_significant, subset=["P-Value"])
+            st.dataframe(styled_df)
         else:
             st.write("No valid test-control comparisons found.")
