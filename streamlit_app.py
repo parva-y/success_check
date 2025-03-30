@@ -14,18 +14,6 @@ st.title("Experiment Success Dashboard")
 # Backend File Upload (Assumed to be fixed)
 uploaded_file = "1MG_Test_and_control_report_transformed (2).csv"  # Replace with actual backend file path
 
-# Custom date parsing to handle different formats
-def parse_date(date_str):
-    try:
-        # Try parsing ISO format
-        return pd.to_datetime(date_str)
-    except:
-        try:
-            # Try parsing DD/MM/YYYY format
-            return datetime.strptime(date_str, '%d/%m/%Y')
-        except:
-            return pd.NaT
-
 # Read the CSV file with custom date parsing
 df = pd.read_csv(uploaded_file, parse_dates=['date'], date_parser=parse_date)
 
