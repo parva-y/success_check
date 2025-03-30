@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import scipy.stats as stats
+import numpy as np
 
 st.title("Experiment Success Checker")
 
@@ -39,19 +40,34 @@ if uploaded_file is not None:
             metric_options = ['gmv_per_audience', 'app_opens_per_audience', 'orders_per_audience', 'transactors_per_audience']
             selected_metric = st.selectbox("Select Metric", metric_options)
             
-            control_data = df_filtered[df_filtered['data_set'] == control_group][selected_metric]
-            test_data = df_filtered[df_filtered['data_set'] == test_group][selected_metric]
+            df_control = df_filtered[df_filtered['data_set'] == control_group].set_index('date')[selected_metric]
+            df_test = df_filtered[df_filtered['data_set'] == test_group].set_index('date')[selected_metric]
             
-            # Perform statistical test (t-test)
-            t_stat, p_value = stats.ttest_ind(control_data, test_data, equal_var=False, nan_policy='omit')
+            # Align dates for paired testing
+            df_combined = pd.concat([df_control, df_test], axis=1, keys=[control_group, test_group]).dropna()
+            control_values = df_combined[control_group]
+            test_values = df_combined[test_group]
             
+            # Perform statistical tests
+            results = {}
+            
+            # 1. Paired t-test (if data is normally distributed)
+            t_stat, p_value_ttest = stats.ttest_rel(control_values, test_values)
+            results["Paired t-test"] = (t_stat, p_value_ttest)
+            
+            # 2. Mann-Whitney U Test (if data is non-normal)
+            u_stat, p_value_mw = stats.mannwhitneyu(control_values, test_values, alternative='two-sided')
+            results["Mann-Whitney U Test"] = (u_stat, p_value_mw)
+            
+            # Display results
             st.write(f"### {selected_metric.replace('_', ' ').title()} Comparison")
-            st.write(f"Control Mean: {control_data.mean():.4f}")
-            st.write(f"Test Mean: {test_data.mean():.4f}")
-            st.write(f"T-Statistic: {t_stat:.4f}")
-            st.write(f"P-Value: {p_value:.4f}")
+            st.write(f"Control Mean: {control_values.mean():.4f}")
+            st.write(f"Test Mean: {test_values.mean():.4f}")
             
-            if p_value < 0.05:
-                st.success("Statistically Significant Difference Detected! 🚀")
-            else:
-                st.info("No Significant Difference Detected.")
+            for test_name, (stat, p_val) in results.items():
+                st.write(f"**{test_name}**")
+                st.write(f"Statistic: {stat:.4f}, P-Value: {p_val:.4f}")
+                if p_val < 0.05:
+                    st.success(f"{test_name}: Statistically Significant Difference Detected! 🚀")
+                else:
+                    st.info(f"{test_name}: No Significant Difference Detected.")
