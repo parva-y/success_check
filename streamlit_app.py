@@ -62,14 +62,16 @@ if uploaded_file is not None:
                     change_points = algo.predict(pen=1)
                     
                     # Store results
-                    tests = [("Paired t-test", t_stat, p_value_ttest),
-                             ("Mann-Whitney U Test", u_stat, p_value_mw),
-                             ("Z-Test", z_stat, p_value_ztest),
-                             ("Kolmogorov-Smirnov Test", ks_stat, p_value_ks),
-                             ("Change Point Detection", len(change_points)-1, "N/A")]
+                    tests = [
+                        ("Paired t-test", t_stat, p_value_ttest),
+                        ("Mann-Whitney U Test", u_stat, p_value_mw),
+                        ("Z-Test", z_stat, p_value_ztest),
+                        ("Kolmogorov-Smirnov Test", ks_stat, p_value_ks),
+                        ("Change Point Detection", len(change_points)-1, np.nan)  # Use np.nan for non-numeric values
+                    ]
                     
                     for test_name, stat, p_value in tests:
-                        significance = "Pass" if (p_value != "N/A" and p_value < 0.05) else "Fail"
+                        significance = "Pass" if (not pd.isna(p_value) and p_value < 0.05) else "Fail"
                         all_results.append([cohort, test_group, metric, control_values.mean(), test_values.mean(), test_name, stat, p_value])
                         summary_results.append([cohort, test_name, significance])
         
@@ -78,9 +80,9 @@ if uploaded_file is not None:
             results_df = pd.DataFrame(all_results, columns=["Cohort", "Test Group", "Metric", "Control Mean", "Test Mean", "Test", "Statistic", "P-Value"])
             st.write("### Detailed Experiment Results Table")
             
-            # Apply conditional formatting
+            # Apply conditional formatting only to numeric p-values
             def highlight_significant(s):
-                return ['background-color: lightgreen' if v < 0.05 else '' for v in s]
+                return ['background-color: lightgreen' if (not pd.isna(v) and v < 0.05) else '' for v in s]
             
             styled_df = results_df.style.apply(highlight_significant, subset=["P-Value"])
             st.dataframe(styled_df)
