@@ -7,6 +7,12 @@ from scipy.stats import ks_2samp
 import plotly.express as px
 
 st.set_page_config(layout="wide")
+
+# Password protection
+password = st.text_input("Enter Password:", type="password")
+if password != "Antidormancy@68C":
+    st.stop()
+
 st.title("Experiment Success Dashboard")
 
 # Backend File Upload (Assumed to be fixed)
@@ -52,6 +58,8 @@ test_marked_dates = {
 selected_cohort = st.sidebar.selectbox("Select Cohort", df['cohort'].unique())
 st.sidebar.write(f"Test Start Date: {test_start_dates.get(selected_cohort, 'Unknown')}")
 
+st.write(f"## Selected Cohort: {selected_cohort}")
+
 df_filtered = df[(df['cohort'] == selected_cohort) & (df['date'] >= test_start_dates.get(selected_cohort, df['date'].min()))]
 
 test_groups = [g for g in df_filtered['data_set'].unique() if g != control_group]
@@ -68,7 +76,7 @@ st.write("### Metric Trends: Control vs Test Groups")
 for metric in metrics:
     fig = px.line(df_filtered, x='date', y=metric, color='data_set', title=metric.replace("_", " ").title())
     fig.update_traces(connectgaps=False)  # Fix line connection issue
-    fig.update_xaxes(tickformat="%d/%m")  # Ensure dates are displayed correctly without timestamp
+    fig.update_xaxes(type='category', tickformat="%d/%m")  # Ensure dates are displayed correctly without timestamp
     
     # Mark significant test dates
     for mark_date in test_marked_dates.get(selected_cohort, []):
