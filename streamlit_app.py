@@ -9,9 +9,12 @@ import plotly.express as px
 st.set_page_config(layout="wide")
 
 # Password protection
-password = st.text_input("Enter Password:", type="password")
-if password != "Antidormancy@68C":
-    st.stop()
+if "authenticated" not in st.session_state:
+    password = st.text_input("Enter Password:", type="password")
+    if password == "Antidormancy@68C":
+        st.session_state["authenticated"] = True
+    else:
+        st.stop()
 
 st.title("Experiment Success Dashboard")
 
@@ -76,7 +79,7 @@ st.write("### Metric Trends: Control vs Test Groups")
 for metric in metrics:
     fig = px.line(df_filtered, x='date', y=metric, color='data_set', title=metric.replace("_", " ").title())
     fig.update_traces(connectgaps=False)  # Fix line connection issue
-    fig.update_xaxes(type='category', tickformat="%d/%m")  # Ensure dates are displayed correctly without timestamp
+    fig.update_xaxes(tickformat="%d/%m")  # Ensure dates are displayed correctly without timestamp
     
     # Mark significant test dates
     for mark_date in test_marked_dates.get(selected_cohort, []):
