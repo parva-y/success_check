@@ -81,14 +81,13 @@ for metric in metrics:
     fig.update_traces(connectgaps=False)  # Fix line connection issue
     
     # Updated x-axis format to display as ddmm
-    fig.update_xaxes(
-        type='category',
-        tickformat="%d%m",  # Changed from "%d/%m" to "%d%m" for ddmm format
+    fig.update_xaxes    (
+        tickformat="%d/%m",
         tickmode='array',
-        tickvals=df_filtered['date'].dt.strftime('%Y-%m-%d').unique(),
-        ticktext=df_filtered['date'].dt.strftime('%d%m').unique()
+        tickvals=df_filtered['date'].unique(),
+        ticktext=[d.strftime('%d/%m') for d in df_filtered['date'].unique()]
     )
-    
+
     # Mark significant test dates
     for mark_date in test_marked_dates.get(selected_cohort, []):
         if mark_date in df_filtered['date'].astype(str).values:
