@@ -79,7 +79,15 @@ st.write("### Metric Trends: Control vs Test Groups")
 for metric in metrics:
     fig = px.line(df_filtered, x='date', y=metric, color='data_set', title=metric.replace("_", " ").title())
     fig.update_traces(connectgaps=False)  # Fix line connection issue
-    fig.update_xaxes(tickformat="%d/%m")  # Ensure dates are displayed correctly without timestamp
+    
+    # Updated x-axis format to display as ddmm
+    fig.update_xaxes(
+        type='category',
+        tickformat="%d%m",  # Changed from "%d/%m" to "%d%m" for ddmm format
+        tickmode='array',
+        tickvals=df_filtered['date'].dt.strftime('%Y-%m-%d').unique(),
+        ticktext=df_filtered['date'].dt.strftime('%d%m').unique()
+    )
     
     # Mark significant test dates
     for mark_date in test_marked_dates.get(selected_cohort, []):
