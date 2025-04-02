@@ -74,12 +74,24 @@ if not test_groups:
 # Metric Selection
 metrics = ['gmv_per_audience', 'app_opens_per_audience', 'orders_per_audience', 'transactors_per_audience']
 
+# Plot trends
+st.write("### Metric Trends: Control vs Test Groups")
+for metric in metrics:
+    fig = px.line(df_filtered, x='date', y=metric, color='data_set', title=metric.replace("_", " ").title())
+    fig.update_traces(connectgaps=False)
+    fig.update_xaxes(tickformat="%d/%m")
+    
+    for mark_date in test_marked_dates.get(selected_cohort, []):
+        if mark_date in df_filtered['date'].astype(str).values:
+            fig.add_vline(x=mark_date, line_width=2, line_dash="dash", line_color="red")
+    
+    st.plotly_chart(fig, use_container_width=True)
+
 # Prepare results table
 all_results = []
 
 test_start_dates_actual = {tg: df_filtered[df_filtered['data_set'] == tg]['date'].min() for tg in test_groups}
 
-# Iterate over test groups
 for test_group in test_groups:
     first_test_date = test_start_dates_actual[test_group]
     
@@ -91,27 +103,12 @@ for test_group in test_groups:
         control_values = df_combined[control_group]
         test_values = df_combined[test_group]
         
-        # Perform statistical tests
         t_stat, p_value_ttest = stats.ttest_rel(control_values, test_values)
-        u_stat, p_value_mw = stats.mannwhitneyu(control_values, test_values, alternative='two-sided')
-        ks_stat, p_value_ks = ks_2samp(control_values, test_values)
-        
-        # Calculate lift
-        lift = ((test_values.mean() - control_values.mean()) / control_values.mean()) * 100
-        
-        tests = [
-            ("Paired t-test", t_stat, p_value_ttest),
-            ("Mann-Whitney U Test", u_stat, p_value_mw),
-            ("Kolmogorov-Smirnov Test", ks_stat, p_value_ks)
-        ]
-        
-        for test_name, stat, p_value in tests:
-            pass_fail = "Pass" if p_value < 0.05 else "Fail"
-            all_results.append([selected_cohort, test_group, metric, control_values.mean(), test_values.mean(), test_name, stat, p_value, pass_fail, lift])
+        pass_fail = "Pass" if p_value_ttest < 0.05 else "Fail"
+        all_results.append([selected_cohort, test_group, metric, control_values.mean(), test_values.mean(), "Paired t-test", t_stat, p_value_ttest, pass_fail])
 
-# Display detailed results
 st.write("### Detailed Experiment Results Table")
-results_df = pd.DataFrame(all_results, columns=["Cohort", "Test Group", "Metric", "Control Mean", "Test Mean", "Test", "Statistic", "P-Value", "Pass/Fail", "Lift (%)"])
+results_df = pd.DataFrame(all_results, columns=["Cohort", "Test Group", "Metric", "Control Mean", "Test Mean", "Test", "Statistic", "P-Value", "Pass/Fail"])
 
 styled_df = results_df.style.apply(lambda s: ['background-color: lightgreen' if v == "Pass" else '' for v in s], subset=["Pass/Fail"])
 st.dataframe(styled_df)
