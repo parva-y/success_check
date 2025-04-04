@@ -212,7 +212,7 @@ test_start_dates_actual = {tg: df_filtered[df_filtered['data_set'] == tg]['date'
 for test_group in test_groups:
     first_test_date = test_start_dates_actual[test_group]
 
-    for metric in metrics:
+for metric in metrics:
     # Use df_filtered which already has the recency filter applied
     plot_data = prepare_plot_data(df_filtered, metric, selected_recency)
     
