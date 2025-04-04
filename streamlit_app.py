@@ -25,9 +25,16 @@ df = pd.read_csv(uploaded_file, parse_dates=['date'])
 
 # Ensure necessary columns exist
 required_columns = {'date', 'data_set', 'audience_size', 'app_opens', 'transactors', 'orders', 'gmv', 'cohort'}
+# Check for recency columns - UPDATED COLUMN NAMES
+recency_columns = {'r_91_120', 'r_121_150', 'r_151_180', 'r_181_365'}
+has_recency_data = recency_columns.issubset(df.columns)
+
 if not required_columns.issubset(df.columns):
     st.write("Missing required columns in the CSV file.")
     st.stop()
+
+if has_recency_data:
+    st.sidebar.write("✅ Recency data available")
 
 # Sort data by date
 df = df.sort_values(by='date')
@@ -87,6 +94,62 @@ for metric in metrics:
 
     st.plotly_chart(fig, use_container_width=True)
 
+# Add recency analysis if data is available
+if has_recency_data:
+    st.write("### Recency Breakdown Analysis")
+    
+    # Get the latest date for each data_set
+    latest_data = df_filtered.loc[df_filtered.groupby('data_set')['date'].idxmax()]
+    
+    # Create recency columns with percentages - UPDATED COLUMN NAMES
+    recency_metrics = ['r_91_120', 'r_121_150', 'r_151_180', 'r_181_365']
+    
+    # Pivot the recency data for easier comparison
+    recency_pivot = latest_data.pivot(index='data_set', columns=None, 
+                                     values=['audience_size'] + recency_metrics)
+    
+    # Calculate percentages
+    for metric in recency_metrics:
+        recency_pivot[f'{metric}_pct'] = (recency_pivot[metric] / recency_pivot['audience_size'] * 100).round(2)
+    
+    # Convert to a format suitable for plotting
+    recency_plot_data = []
+    for idx, row in recency_pivot.iterrows():
+        for metric in recency_metrics:
+            label = metric.replace('r_', '')
+            recency_plot_data.append({
+                'Data Set': idx,
+                'Recency Range (days)': label,
+                'Count': row[metric],
+                'Percentage': row[f'{metric}_pct']
+            })
+    
+    recency_df = pd.DataFrame(recency_plot_data)
+    
+    # Plot recency distribution
+    fig1 = px.bar(recency_df, x='Data Set', y='Percentage', color='Recency Range (days)', 
+                 barmode='group', title='Recency Distribution (%) by Group')
+    st.plotly_chart(fig1, use_container_width=True)
+    
+    fig2 = px.bar(recency_df, x='Data Set', y='Count', color='Recency Range (days)', 
+                 barmode='group', title='Recency Distribution (Count) by Group')
+    st.plotly_chart(fig2, use_container_width=True)
+    
+    # Create a data table for the recency metrics
+    st.write("### Recency Data Table")
+    
+    # Reshape for better display in a table
+    table_data = []
+    for group in recency_pivot.index:
+        row_data = {'Data Set': group, 'Audience Size': recency_pivot.loc[group, 'audience_size']}
+        for metric in recency_metrics:
+            row_data[f'{metric} Count'] = recency_pivot.loc[group, metric]
+            row_data[f'{metric} %'] = recency_pivot.loc[group, f'{metric}_pct']
+        table_data.append(row_data)
+        
+    table_df = pd.DataFrame(table_data)
+    st.dataframe(table_df)
+
 # Prepare results table
 all_results = []
 
@@ -112,10 +175,12 @@ for test_group in test_groups:
         # Kolmogorov-Smirnov Test (already implemented)
         ks_stat, p_value_ks = ks_2samp(control_values, test_values)
         
+        # No additional tests needed
+
         tests = [
             ("Paired t-test", t_stat, p_value_ttest),
-            ("Mann-Whitney U Test", u_stat, p_value_mw),
-            ("Kolmogorov-Smirnov Test", ks_stat, p_value_ks),
+            ("Mann-Whitney U Test", u_stat, p_value_mw), 
+            ("Kolmogorov-Smirnov Test", ks_stat, p_value_ks)
         ]
 
         for test_name, stat, p_value in tests:
