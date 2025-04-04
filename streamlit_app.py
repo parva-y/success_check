@@ -80,11 +80,11 @@ for metric in metrics:
     fig = px.line(df_filtered, x='date', y=metric, color='data_set', title=metric.replace("_", " ").title())
     fig.update_traces(connectgaps=False)
     fig.update_xaxes(tickformat="%d/%m")
-    
+
     for mark_date in test_marked_dates.get(selected_cohort, []):
         if mark_date in df_filtered['date'].astype(str).values:
             fig.add_vline(x=mark_date, line_width=2, line_dash="dash", line_color="red")
-    
+
     st.plotly_chart(fig, use_container_width=True)
 
 # Prepare results table
@@ -94,18 +94,28 @@ test_start_dates_actual = {tg: df_filtered[df_filtered['data_set'] == tg]['date'
 
 for test_group in test_groups:
     first_test_date = test_start_dates_actual[test_group]
-    
+
     for metric in metrics:
         df_control = df_filtered[(df_filtered['data_set'] == control_group) & (df_filtered['date'] >= first_test_date)].groupby('date')[metric].mean()
         df_test = df_filtered[(df_filtered['data_set'] == test_group) & (df_filtered['date'] >= first_test_date)].groupby('date')[metric].mean()
-        
+
         df_combined = pd.concat([df_control, df_test], axis=1, keys=[control_group, test_group]).dropna()
         control_values = df_combined[control_group]
         test_values = df_combined[test_group]
-        
+
         t_stat, p_value_ttest = stats.ttest_rel(control_values, test_values)
-        pass_fail = "Pass" if p_value_ttest < 0.05 else "Fail"
-        all_results.append([selected_cohort, test_group, metric, control_values.mean(), test_values.mean(), "Paired t-test", t_stat, p_value_ttest, pass_fail])
+        u_stat, p_value_mw = stats.mannwhitneyu(control_values, test_values, alternative='two-sided')
+        ks_stat, p_value_ks = ks_2samp(control_values, test_values)
+
+        tests = [
+            ("Paired t-test", t_stat, p_value_ttest),
+            ("Mann-Whitney U Test", u_stat, p_value_mw),
+            ("Kolmogorov-Smirnov Test", ks_stat, p_value_ks)
+        ]
+
+        for test_name, stat, p_value in tests:
+            pass_fail = "Pass" if p_value < 0.05 else "Fail"
+            all_results.append([selected_cohort, test_group, metric, control_values.mean(), test_values.mean(), test_name, stat, p_value, pass_fail])
 
 st.write("### Detailed Experiment Results Table")
 results_df = pd.DataFrame(all_results, columns=["Cohort", "Test Group", "Metric", "Control Mean", "Test Mean", "Test", "Statistic", "P-Value", "Pass/Fail"])
