@@ -25,9 +25,8 @@ df = pd.read_csv(uploaded_file, parse_dates=['date'])
 
 # Ensure necessary columns exist
 required_columns = {'date', 'data_set', 'audience_size', 'app_opens', 'transactors', 'orders', 'gmv', 'cohort'}
-# Check for recency columns - UPDATED COLUMN NAMES
-recency_columns = {'r_91_120', 'r_121_150', 'r_151_180', 'r_181_365'}
-has_recency_data = recency_columns.issubset(df.columns)
+# Check for Recency column
+has_recency_data = 'Recency' in df.columns
 
 if not required_columns.issubset(df.columns):
     st.write("Missing required columns in the CSV file.")
@@ -98,57 +97,65 @@ for metric in metrics:
 if has_recency_data:
     st.write("### Recency Breakdown Analysis")
     
-    # Get the latest date for each data_set
-    latest_data = df_filtered.loc[df_filtered.groupby('data_set')['date'].idxmax()]
+    # Define recency ranges we're interested in
+    recency_ranges = ['91-120', '121-150', '151-180', '181-365']
     
-    # Create recency columns with percentages - UPDATED COLUMN NAMES
-    recency_metrics = ['r_91_120', 'r_121_150', 'r_151_180', 'r_181_365']
+    # Filter by recency ranges we're interested in
+    df_recency = df_filtered[df_filtered['Recency'].isin(recency_ranges)]
     
-    # Pivot the recency data for easier comparison
-    recency_pivot = latest_data.pivot(index='data_set', columns=None, 
-                                     values=['audience_size'] + recency_metrics)
+    # Get the latest data for each data_set and recency combination
+    latest_date = df_filtered['date'].max()
+    latest_data = df_recency[df_recency['date'] == latest_date]
     
-    # Calculate percentages
-    for metric in recency_metrics:
-        recency_pivot[f'{metric}_pct'] = (recency_pivot[metric] / recency_pivot['audience_size'] * 100).round(2)
-    
-    # Convert to a format suitable for plotting
-    recency_plot_data = []
-    for idx, row in recency_pivot.iterrows():
-        for metric in recency_metrics:
-            label = metric.replace('r_', '')
-            recency_plot_data.append({
-                'Data Set': idx,
-                'Recency Range (days)': label,
-                'Count': row[metric],
-                'Percentage': row[f'{metric}_pct']
-            })
-    
-    recency_df = pd.DataFrame(recency_plot_data)
-    
-    # Plot recency distribution
-    fig1 = px.bar(recency_df, x='Data Set', y='Percentage', color='Recency Range (days)', 
-                 barmode='group', title='Recency Distribution (%) by Group')
-    st.plotly_chart(fig1, use_container_width=True)
-    
-    fig2 = px.bar(recency_df, x='Data Set', y='Count', color='Recency Range (days)', 
-                 barmode='group', title='Recency Distribution (Count) by Group')
-    st.plotly_chart(fig2, use_container_width=True)
-    
-    # Create a data table for the recency metrics
-    st.write("### Recency Data Table")
-    
-    # Reshape for better display in a table
-    table_data = []
-    for group in recency_pivot.index:
-        row_data = {'Data Set': group, 'Audience Size': recency_pivot.loc[group, 'audience_size']}
-        for metric in recency_metrics:
-            row_data[f'{metric} Count'] = recency_pivot.loc[group, metric]
-            row_data[f'{metric} %'] = recency_pivot.loc[group, f'{metric}_pct']
-        table_data.append(row_data)
+    if len(latest_data) > 0:
+        # Group by data_set and Recency, and sum the audience_size
+        recency_summary = latest_data.groupby(['data_set', 'Recency']).agg({
+            'audience_size': 'sum'
+        }).reset_index()
         
-    table_df = pd.DataFrame(table_data)
-    st.dataframe(table_df)
+        # Calculate total audience size per data_set
+        total_audience = latest_data.groupby('data_set')['audience_size'].sum().reset_index()
+        total_audience.columns = ['data_set', 'total_audience']
+        
+        # Merge to get percentages
+        recency_summary = recency_summary.merge(total_audience, on='data_set')
+        recency_summary['percentage'] = (recency_summary['audience_size'] / recency_summary['total_audience'] * 100).round(2)
+        
+        # Plot recency distribution
+        fig1 = px.bar(recency_summary, x='data_set', y='percentage', color='Recency', 
+                     barmode='group', title='Recency Distribution (%) by Group')
+        st.plotly_chart(fig1, use_container_width=True)
+        
+        fig2 = px.bar(recency_summary, x='data_set', y='audience_size', color='Recency', 
+                     barmode='group', title='Recency Distribution (Count) by Group')
+        st.plotly_chart(fig2, use_container_width=True)
+        
+        # Create a data table for the recency metrics
+        st.write("### Recency Data Table")
+        
+        # Pivot table for better display
+        pivot_table = recency_summary.pivot(index='data_set', columns='Recency', 
+                                          values=['audience_size', 'percentage'])
+        
+        # Flatten the MultiIndex and create a new DataFrame
+        table_data = []
+        for data_set in pivot_table.index:
+            row = {'Data Set': data_set, 'Total Audience': total_audience[total_audience['data_set'] == data_set]['total_audience'].iloc[0]}
+            
+            for recency_range in recency_ranges:
+                try:
+                    row[f'{recency_range} Count'] = pivot_table.loc[data_set, ('audience_size', recency_range)]
+                    row[f'{recency_range} %'] = pivot_table.loc[data_set, ('percentage', recency_range)]
+                except:
+                    row[f'{recency_range} Count'] = 0
+                    row[f'{recency_range} %'] = 0.0
+                    
+            table_data.append(row)
+            
+        table_df = pd.DataFrame(table_data)
+        st.dataframe(table_df)
+    else:
+        st.write("No recency data available for the latest date.")
 
 # Prepare results table
 all_results = []
