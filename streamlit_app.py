@@ -67,14 +67,34 @@ test_marked_dates = {
 selected_cohort = st.sidebar.selectbox("Select Cohort", df['cohort'].unique())
 st.sidebar.write(f"Test Start Date: {test_start_dates.get(selected_cohort, 'Unknown')}")
 
-st.write(f"## Selected Cohort: {selected_cohort}")
+# Recency selector (new feature)
+if has_recency_data:
+    # Get all available recency values
+    recency_values = sorted(df['Recency'].unique())
+    # Add "Overview" option at the beginning
+    recency_options = ["Overview"] + list(recency_values)
+    selected_recency = st.sidebar.selectbox("Select Recency", recency_options)
+    st.sidebar.write(f"Selected Recency: {selected_recency}")
+else:
+    selected_recency = "Overview"  # Default if no recency data
 
-df_filtered = df[(df['cohort'] == selected_cohort) & (df['date'] >= test_start_dates.get(selected_cohort, df['date'].min()))]
+st.write(f"## Selected Cohort: {selected_cohort}")
+if selected_recency != "Overview":
+    st.write(f"## Selected Recency: {selected_recency}")
+
+# Filter data by cohort and date
+base_filtered_df = df[(df['cohort'] == selected_cohort) & (df['date'] >= test_start_dates.get(selected_cohort, df['date'].min()))]
+
+# Now apply recency filter if needed
+if selected_recency != "Overview" and has_recency_data:
+    df_filtered = base_filtered_df[base_filtered_df['Recency'] == selected_recency]
+else:
+    df_filtered = base_filtered_df
 
 test_groups = [g for g in df_filtered['data_set'].unique() if g != control_group]
 
 if not test_groups:
-    st.write("No test groups found for this cohort.")
+    st.write("No test groups found for this cohort and recency combination.")
     st.stop()
 
 # Metric Selection
@@ -82,29 +102,55 @@ metrics = ['gmv_per_audience', 'app_opens_per_audience', 'orders_per_audience', 
 
 # Plot trends
 st.write("### Metric Trends: Control vs Test Groups")
+
+# Function to prepare data for plotting based on selected recency
+def prepare_plot_data(base_df, metric, selected_recency):
+    if selected_recency == "Overview" and has_recency_data:
+        # Sum metrics for the same date across recencies and recalculate per audience
+        plot_data = base_df.groupby(['date', 'data_set']).agg({
+            'gmv': 'sum',
+            'app_opens': 'sum',
+            'orders': 'sum',
+            'transactors': 'sum',
+            'audience_size': 'sum'
+        }).reset_index()
+        
+        # Recalculate the metrics after aggregation
+        plot_data['gmv_per_audience'] = plot_data['gmv'] / plot_data['audience_size']
+        plot_data['app_opens_per_audience'] = plot_data['app_opens'] / plot_data['audience_size']
+        plot_data['orders_per_audience'] = plot_data['orders'] / plot_data['audience_size']
+        plot_data['transactors_per_audience'] = plot_data['transactors'] / plot_data['audience_size']
+        
+        return plot_data
+    else:
+        # Use filtered data directly if specific recency is selected
+        return base_df
+
 for metric in metrics:
-    fig = px.line(df_filtered, x='date', y=metric, color='data_set', title=metric.replace("_", " ").title())
+    plot_data = prepare_plot_data(base_filtered_df, metric, selected_recency)
+    
+    fig = px.line(plot_data, x='date', y=metric, color='data_set', title=metric.replace("_", " ").title())
     fig.update_traces(connectgaps=False)
     fig.update_xaxes(tickformat="%d/%m")
 
     for mark_date in test_marked_dates.get(selected_cohort, []):
-        if mark_date in df_filtered['date'].astype(str).values:
+        if mark_date in plot_data['date'].astype(str).values:
             fig.add_vline(x=mark_date, line_width=2, line_dash="dash", line_color="red")
 
     st.plotly_chart(fig, use_container_width=True)
 
-# Add recency analysis if data is available
-if has_recency_data:
+# Add recency analysis if data is available and Overview is selected
+if has_recency_data and selected_recency == "Overview":
     st.write("### Recency Breakdown Analysis")
     
     # Define recency ranges we're interested in
     recency_ranges = ['91-120', '121-150', '151-180', '181-365']
     
     # Filter by recency ranges we're interested in
-    df_recency = df_filtered[df_filtered['Recency'].isin(recency_ranges)]
+    df_recency = base_filtered_df[base_filtered_df['Recency'].isin(recency_ranges)]
     
     # Get the latest data for each data_set and recency combination
-    latest_date = df_filtered['date'].max()
+    latest_date = base_filtered_df['date'].max()
     latest_data = df_recency[df_recency['date'] == latest_date]
     
     if len(latest_data) > 0:
@@ -157,7 +203,8 @@ if has_recency_data:
     else:
         st.write("No recency data available for the latest date.")
 
-# Prepare results table
+# Prepare results table based on the filtered data (respecting recency selection)
+st.write("### Detailed Experiment Results Table")
 all_results = []
 
 test_start_dates_actual = {tg: df_filtered[df_filtered['data_set'] == tg]['date'].min() for tg in test_groups}
@@ -166,23 +213,73 @@ for test_group in test_groups:
     first_test_date = test_start_dates_actual[test_group]
 
     for metric in metrics:
-        df_control = df_filtered[(df_filtered['data_set'] == control_group) & (df_filtered['date'] >= first_test_date)].groupby('date')[metric].mean()
-        df_test = df_filtered[(df_filtered['data_set'] == test_group) & (df_filtered['date'] >= first_test_date)].groupby('date')[metric].mean()
+        # Get data after test start date for control and test groups
+        if selected_recency == "Overview" and has_recency_data:
+            # For overview, we need to aggregate first then calculate stats
+            control_data = base_filtered_df[(base_filtered_df['data_set'] == control_group) & 
+                                    (base_filtered_df['date'] >= first_test_date)]
+            test_data = base_filtered_df[(base_filtered_df['data_set'] == test_group) & 
+                                (base_filtered_df['date'] >= first_test_date)]
+            
+            # Group by date and calculate the metrics
+            control_grouped = control_data.groupby('date').agg({
+                'gmv': 'sum',
+                'app_opens': 'sum',
+                'orders': 'sum',
+                'transactors': 'sum',
+                'audience_size': 'sum'
+            })
+            
+            test_grouped = test_data.groupby('date').agg({
+                'gmv': 'sum',
+                'app_opens': 'sum',
+                'orders': 'sum',
+                'transactors': 'sum',
+                'audience_size': 'sum'
+            })
+            
+            # Calculate metrics from aggregated data
+            if metric == 'gmv_per_audience':
+                control_values = control_grouped['gmv'] / control_grouped['audience_size']
+                test_values = test_grouped['gmv'] / test_grouped['audience_size']
+            elif metric == 'app_opens_per_audience':
+                control_values = control_grouped['app_opens'] / control_grouped['audience_size']
+                test_values = test_grouped['app_opens'] / test_grouped['audience_size']
+            elif metric == 'orders_per_audience':
+                control_values = control_grouped['orders'] / control_grouped['audience_size']
+                test_values = test_grouped['orders'] / test_grouped['audience_size']
+            elif metric == 'transactors_per_audience':
+                control_values = control_grouped['transactors'] / control_grouped['audience_size']
+                test_values = test_grouped['transactors'] / test_grouped['audience_size']
+        else:
+            # For specific recency, use filtered data directly
+            df_control = df_filtered[(df_filtered['data_set'] == control_group) & 
+                                    (df_filtered['date'] >= first_test_date)]
+            df_test = df_filtered[(df_filtered['data_set'] == test_group) & 
+                                (df_filtered['date'] >= first_test_date)]
+            
+            # Group by date to get daily averages
+            control_values = df_control.groupby('date')[metric].mean()
+            test_values = df_test.groupby('date')[metric].mean()
 
-        df_combined = pd.concat([df_control, df_test], axis=1, keys=[control_group, test_group]).dropna()
+        # Ensure we have matching dates for paired tests
+        df_combined = pd.concat([control_values, test_values], axis=1, keys=[control_group, test_group]).dropna()
+        
+        if len(df_combined) < 2:
+            # Skip if not enough data points for statistical testing
+            continue
+            
         control_values = df_combined[control_group]
         test_values = df_combined[test_group]
 
-        # T-test (already implemented)
+        # T-test
         t_stat, p_value_ttest = stats.ttest_rel(control_values, test_values)
         
-        # Mann-Whitney U Test (already implemented)
+        # Mann-Whitney U Test
         u_stat, p_value_mw = stats.mannwhitneyu(control_values, test_values, alternative='two-sided')
         
-        # Kolmogorov-Smirnov Test (already implemented)
+        # Kolmogorov-Smirnov Test
         ks_stat, p_value_ks = ks_2samp(control_values, test_values)
-        
-        # No additional tests needed
 
         tests = [
             ("Paired t-test", t_stat, p_value_ttest),
@@ -190,12 +287,44 @@ for test_group in test_groups:
             ("Kolmogorov-Smirnov Test", ks_stat, p_value_ks)
         ]
 
+        recency_label = selected_recency if selected_recency != "Overview" else "All"
+        
         for test_name, stat, p_value in tests:
             pass_fail = "Pass" if p_value < 0.05 else "Fail"
-            all_results.append([selected_cohort, test_group, metric, control_values.mean(), test_values.mean(), test_name, stat, p_value, pass_fail])
+            lift = ((test_values.mean() - control_values.mean()) / control_values.mean() * 100).round(2)
+            all_results.append([
+                selected_cohort, 
+                test_group, 
+                recency_label,
+                metric, 
+                control_values.mean(), 
+                test_values.mean(),
+                lift, 
+                test_name, 
+                stat, 
+                p_value, 
+                pass_fail
+            ])
 
-st.write("### Detailed Experiment Results Table")
-results_df = pd.DataFrame(all_results, columns=["Cohort", "Test Group", "Metric", "Control Mean", "Test Mean", "Test", "Statistic", "P-Value", "Pass/Fail"])
+results_df = pd.DataFrame(all_results, columns=[
+    "Cohort", "Test Group", "Recency", "Metric", 
+    "Control Mean", "Test Mean", "Lift %", 
+    "Test", "Statistic", "P-Value", "Pass/Fail"
+])
 
-styled_df = results_df.style.apply(lambda s: ['background-color: lightgreen' if v == "Pass" else '' for v in s], subset=["Pass/Fail"])
+# Round numeric columns for better display
+numeric_cols = ["Control Mean", "Test Mean", "Lift %", "Statistic", "P-Value"]
+results_df[numeric_cols] = results_df[numeric_cols].round(4)
+
+# Add color styling for pass/fail and lift
+def style_dataframe(val):
+    if isinstance(val, str) and val == "Pass":
+        return 'background-color: lightgreen'
+    elif isinstance(val, float) and pd.Series([val]).index[0] == results_df.columns.get_loc("Lift %") and val > 0:
+        return 'color: green'
+    elif isinstance(val, float) and pd.Series([val]).index[0] == results_df.columns.get_loc("Lift %") and val < 0:
+        return 'color: red'
+    return ''
+
+styled_df = results_df.style.applymap(style_dataframe)
 st.dataframe(styled_df)
