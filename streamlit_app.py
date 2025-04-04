@@ -211,13 +211,11 @@ test_start_dates_actual = {tg: df_filtered[df_filtered['data_set'] == tg]['date'
 
 for test_group in test_groups:
     first_test_date = test_start_dates_actual[test_group]
-
-for metric in metrics:
-    # Use df_filtered which already has the recency filter applied
-    plot_data = prepare_plot_data(df_filtered, metric, selected_recency)
     
-    fig = px.line(plot_data, x='date', y=metric, color='data_set', title=metric.replace("_", " ").title())
-    # ... rest of plotting code ...
+    for metric in metrics:
+        # Use df_filtered which already has the recency filter applied
+        plot_data = prepare_plot_data(df_filtered, metric, selected_recency)
+        
         # Get data after test start date for control and test groups
         if selected_recency == "Overview" and has_recency_data:
             # For overview, we need to aggregate first then calculate stats
