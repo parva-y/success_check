@@ -103,7 +103,7 @@ metrics = ['gmv_per_audience', 'app_opens_per_audience', 'orders_per_audience', 
 # Plot trends
 st.write("### Metric Trends: Control vs Test Groups")
 
-# Function to prepare data for plotting based on selected recency
+# Improved function to prepare data for plotting
 def prepare_plot_data(base_df, metric, selected_recency):
     if selected_recency == "Overview" and has_recency_data:
         # Sum metrics for the same date across recencies and recalculate per audience
@@ -126,17 +126,60 @@ def prepare_plot_data(base_df, metric, selected_recency):
         # Use filtered data directly if specific recency is selected
         return base_df
 
+# Updated plot generation code
 for metric in metrics:
     plot_data = prepare_plot_data(base_filtered_df, metric, selected_recency)
     
-    fig = px.line(plot_data, x='date', y=metric, color='data_set', title=metric.replace("_", " ").title())
-    fig.update_traces(connectgaps=False)
-    fig.update_xaxes(tickformat="%d/%m")
-
-    for mark_date in test_marked_dates.get(selected_cohort, []):
-        if mark_date in plot_data['date'].astype(str).values:
-            fig.add_vline(x=mark_date, line_width=2, line_dash="dash", line_color="red")
-
+    # Ensure date is properly formatted as datetime
+    plot_data['date'] = pd.to_datetime(plot_data['date'])
+    
+    # Sort data chronologically
+    plot_data = plot_data.sort_values('date')
+    
+    # Create figure with improved settings
+    fig = px.line(plot_data, x='date', y=metric, color='data_set', 
+                 title=metric.replace("_", " ").title(),
+                 labels={metric: metric.replace("_", " ").title(), 
+                         'date': 'Date', 
+                         'data_set': 'Test Group'})
+    
+    # Improve line rendering
+    fig.update_traces(mode='lines+markers', connectgaps=True, marker=dict(size=5))
+    
+    # Better date formatting
+    fig.update_xaxes(
+        tickformat="%d/%m",
+        tickangle=-45,
+        tickmode='auto',
+        nticks=10
+    )
+    
+    # Improve Y-axis formatting based on the metric
+    if 'gmv' in metric:
+        fig.update_yaxes(tickprefix="$", tickformat=".2f")
+    else:
+        fig.update_yaxes(tickformat=".3f")
+    
+    # Add vertical lines for test days - but reduce visual clutter
+    # Only show every 3rd marker or important ones
+    for i, mark_date in enumerate(test_marked_dates.get(selected_cohort, [])):
+        if i % 3 == 0:  # Show only every third marker to reduce clutter
+            if mark_date in plot_data['date'].astype(str).values:
+                fig.add_vline(x=mark_date, line_width=1, line_dash="dash", line_color="red", opacity=0.5)
+    
+    # Add first test date as a more prominent marker
+    first_test_date = test_start_dates.get(selected_cohort)
+    if first_test_date:
+        fig.add_vline(x=first_test_date, line_width=2, line_dash="dash", 
+                     line_color="red", annotation_text="Test Start")
+    
+    # Improve overall layout
+    fig.update_layout(
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        margin=dict(l=40, r=40, t=60, b=80),
+        hovermode="x unified"
+    )
+    
     st.plotly_chart(fig, use_container_width=True)
 
 # Add recency analysis if data is available and Overview is selected
