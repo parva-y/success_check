@@ -112,19 +112,10 @@ for test_group in test_groups:
         # Kolmogorov-Smirnov Test (already implemented)
         ks_stat, p_value_ks = ks_2samp(control_values, test_values)
         
-        # Z-test (new implementation)
-        z_stat, p_value_z = ztest(control_values, test_values, alternative='two-sided')
-        
-        # U-test (an alternative name for Mann-Whitney U test, but we'll add it separately for clarity)
-        # This is actually identical to the Mann-Whitney test, but showing both for reference
-        u_stat_alt, p_value_u = stats.mannwhitneyu(control_values, test_values, alternative='two-sided')
-
         tests = [
             ("Paired t-test", t_stat, p_value_ttest),
             ("Mann-Whitney U Test", u_stat, p_value_mw),
             ("Kolmogorov-Smirnov Test", ks_stat, p_value_ks),
-            ("Z-test", z_stat, p_value_z),
-            ("U-test", u_stat_alt, p_value_u)
         ]
 
         for test_name, stat, p_value in tests:
