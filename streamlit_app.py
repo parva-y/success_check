@@ -203,66 +203,6 @@ if has_recency_data and selected_recency == "Overview":
     else:
         st.write("No recency data available for the latest date.")
 
-st.write("### 📈 Effectiveness Summary (Incremental Impact by Recency)")
-
-impact_summary = []
-
-for test_group in test_groups:
-    for metric in ['gmv', 'app_opens', 'orders', 'transactors']:
-        control_data = df_filtered[
-            (df_filtered['data_set'] == control_group) &
-            (df_filtered['date'] >= test_start_dates_actual[test_group]) &
-            (df_filtered['test_group'] == test_group)
-        ]
-        test_data = df_filtered[
-            (df_filtered['data_set'] == test_group) &
-            (df_filtered['date'] >= test_start_dates_actual[test_group])
-        ]
-
-        control_grouped = control_data.groupby('recency')[metric].sum()
-        test_grouped = test_data.groupby('recency')[metric].sum()
-
-        all_recencies = sorted(set(control_grouped.index).union(test_grouped.index))
-
-        for recency_bucket in all_recencies:
-            test_total = test_grouped.get(recency_bucket, 0)
-            control_total = control_grouped.get(recency_bucket, 0)
-
-            projected_test = (test_total / 70) * 100
-            projected_control = (control_total / 30) * 100
-            incremental = projected_test - projected_control
-
-            impact_summary.append({
-                "Cohort": selected_cohort,
-                "Test Group": test_group,
-                "Recency": recency_bucket,
-                "Metric": metric,
-                "Test Total": int(test_total),
-                "Control Total": int(control_total),
-                "Projected Incremental": round(incremental, 2),
-                "New Users (if transactors)": int(incremental) if metric == "transactors" else None
-            })
-
-# Create dataframe
-summary_df = pd.DataFrame(impact_summary)
-
-# Add % contribution
-summary_df['% Contribution to Metric'] = summary_df.groupby('Metric')["Projected Incremental"].transform(
-    lambda x: round((x / x.sum()) * 100, 2)
-)
-
-# Clean index for styling
-summary_df.reset_index(drop=True, inplace=True)
-
-# Highlight most impactful row per metric
-def highlight_max(df):
-    # Only apply style to the 'Projected Incremental' column
-    is_max = df.groupby('Metric')['Projected Incremental'].transform('max') == df['Projected Incremental']
-    return ['background-color: #d1e7dd; font-weight: bold' if v else '' for v in is_max]
-
-styled_df = summary_df.style.apply(highlight_max, axis=0, subset=['Projected Incremental'])
-
-st.dataframe(styled_df, use_container_width=True)
 
 # Prepare results table based on the filtered data (respecting recency selection)
 st.write("### Detailed Experiment Results Table")
