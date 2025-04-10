@@ -203,6 +203,66 @@ if has_recency_data and selected_recency == "Overview":
     else:
         st.write("No recency data available for the latest date.")
 
+st.write("### 📈 Effectiveness Summary (Incremental Impact by Recency)")
+
+impact_summary = []
+
+for test_group in test_groups:
+    for metric in ['gmv', 'app_opens', 'orders', 'transactors']:
+        # Filter for post-test period data only
+        control_data = df_filtered[
+            (df_filtered['data_set'] == control_group) &
+            (df_filtered['date'] >= test_start_dates_actual[test_group]) &
+            (df_filtered['test_group'] == test_group)  # assuming this maps to test/campaign
+        ]
+        test_data = df_filtered[
+            (df_filtered['data_set'] == test_group) &
+            (df_filtered['date'] >= test_start_dates_actual[test_group])
+        ]
+
+        # Sum by recency
+        control_grouped = control_data.groupby('recency')[metric].sum()
+        test_grouped = test_data.groupby('recency')[metric].sum()
+
+        for recency_bucket in sorted(set(control_grouped.index).union(test_grouped.index)):
+            test_total = test_grouped.get(recency_bucket, 0)
+            control_total = control_grouped.get(recency_bucket, 0)
+
+            projected_test = (test_total / 70) * 100
+            projected_control = (control_total / 30) * 100
+            incremental = projected_test - projected_control
+
+            impact_summary.append({
+                "Cohort": selected_cohort,
+                "Test Group": test_group,
+                "Recency": recency_bucket,
+                "Metric": metric,
+                "Test Total": int(test_total),
+                "Control Total": int(control_total),
+                "Projected Incremental": round(incremental, 2),
+                "New Users (if transactors)": int(incremental) if metric == "transactors" else None
+            })
+
+# Create dataframe
+summary_df = pd.DataFrame(impact_summary)
+
+# Add % contribution within each metric group
+summary_df['% Contribution to Metric'] = summary_df.groupby(['Metric'])['Projected Incremental'].transform(
+    lambda x: round((x / x.sum()) * 100, 2)
+)
+
+# Highlight most improved row(s) in each metric
+def highlight_max_rows(df):
+    styles = pd.DataFrame('', index=df.index, columns=df.columns)
+    for metric in df['Metric'].unique():
+        idx = df[df['Metric'] == metric]['Projected Incremental'].idxmax()
+        styles.loc[idx, 'Projected Incremental'] = 'background-color: #d1e7dd; font-weight: bold'
+    return styles
+
+st.dataframe(summary_df.style.apply(highlight_max_rows, axis=None))
+
+
+
 # Prepare results table based on the filtered data (respecting recency selection)
 st.write("### Detailed Experiment Results Table")
 all_results = []
@@ -332,60 +392,4 @@ def style_dataframe(val):
 styled_df = results_df.style.applymap(style_dataframe)
 st.dataframe(styled_df)
 
-st.write("### 📈 Effectiveness Summary (Incremental Impact by Recency)")
 
-impact_summary = []
-
-for test_group in test_groups:
-    for metric in ['gmv', 'app_opens', 'orders', 'transactors']:
-        # Filter for post-test period data only
-        control_data = df_filtered[
-            (df_filtered['data_set'] == control_group) &
-            (df_filtered['date'] >= test_start_dates_actual[test_group]) &
-            (df_filtered['test_group'] == test_group)  # assuming this maps to test/campaign
-        ]
-        test_data = df_filtered[
-            (df_filtered['data_set'] == test_group) &
-            (df_filtered['date'] >= test_start_dates_actual[test_group])
-        ]
-
-        # Sum by recency
-        control_grouped = control_data.groupby('recency')[metric].sum()
-        test_grouped = test_data.groupby('recency')[metric].sum()
-
-        for recency_bucket in sorted(set(control_grouped.index).union(test_grouped.index)):
-            test_total = test_grouped.get(recency_bucket, 0)
-            control_total = control_grouped.get(recency_bucket, 0)
-
-            projected_test = (test_total / 70) * 100
-            projected_control = (control_total / 30) * 100
-            incremental = projected_test - projected_control
-
-            impact_summary.append({
-                "Cohort": selected_cohort,
-                "Test Group": test_group,
-                "Recency": recency_bucket,
-                "Metric": metric,
-                "Test Total": int(test_total),
-                "Control Total": int(control_total),
-                "Projected Incremental": round(incremental, 2),
-                "New Users (if transactors)": int(incremental) if metric == "transactors" else None
-            })
-
-# Create dataframe
-summary_df = pd.DataFrame(impact_summary)
-
-# Add % contribution within each metric group
-summary_df['% Contribution to Metric'] = summary_df.groupby(['Metric'])['Projected Incremental'].transform(
-    lambda x: round((x / x.sum()) * 100, 2)
-)
-
-# Highlight most improved row(s) in each metric
-def highlight_max_rows(df):
-    styles = pd.DataFrame('', index=df.index, columns=df.columns)
-    for metric in df['Metric'].unique():
-        idx = df[df['Metric'] == metric]['Projected Incremental'].idxmax()
-        styles.loc[idx, 'Projected Incremental'] = 'background-color: #d1e7dd; font-weight: bold'
-    return styles
-
-st.dataframe(summary_df.style.apply(highlight_max_rows, axis=None))
