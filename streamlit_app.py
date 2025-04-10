@@ -209,22 +209,22 @@ impact_summary = []
 
 for test_group in test_groups:
     for metric in ['gmv', 'app_opens', 'orders', 'transactors']:
-        # Filter for post-test period data only
         control_data = df_filtered[
             (df_filtered['data_set'] == control_group) &
             (df_filtered['date'] >= test_start_dates_actual[test_group]) &
-            (df_filtered['test_group'] == test_group)  # assuming this maps to test/campaign
+            (df_filtered['test_group'] == test_group)
         ]
         test_data = df_filtered[
             (df_filtered['data_set'] == test_group) &
             (df_filtered['date'] >= test_start_dates_actual[test_group])
         ]
 
-        # Sum by recency
         control_grouped = control_data.groupby('recency')[metric].sum()
         test_grouped = test_data.groupby('recency')[metric].sum()
 
-        for recency_bucket in sorted(set(control_grouped.index).union(test_grouped.index)):
+        all_recencies = sorted(set(control_grouped.index).union(test_grouped.index))
+
+        for recency_bucket in all_recencies:
             test_total = test_grouped.get(recency_bucket, 0)
             control_total = control_grouped.get(recency_bucket, 0)
 
@@ -246,22 +246,23 @@ for test_group in test_groups:
 # Create dataframe
 summary_df = pd.DataFrame(impact_summary)
 
-# Add % contribution within each metric group
-summary_df['% Contribution to Metric'] = summary_df.groupby(['Metric'])['Projected Incremental'].transform(
+# Add % contribution
+summary_df['% Contribution to Metric'] = summary_df.groupby('Metric')["Projected Incremental"].transform(
     lambda x: round((x / x.sum()) * 100, 2)
 )
 
-# Highlight most improved row(s) in each metric
-def highlight_max_rows(df):
-    styles = pd.DataFrame('', index=df.index, columns=df.columns)
-    for metric in df['Metric'].unique():
-        idx = df[df['Metric'] == metric]['Projected Incremental'].idxmax()
-        styles.loc[idx, 'Projected Incremental'] = 'background-color: #d1e7dd; font-weight: bold'
-    return styles
+# Clean index for styling
+summary_df.reset_index(drop=True, inplace=True)
 
-st.dataframe(summary_df.style.apply(highlight_max_rows, axis=None))
+# Highlight most impactful row per metric
+def highlight_max(df):
+    # Only apply style to the 'Projected Incremental' column
+    is_max = df.groupby('Metric')['Projected Incremental'].transform('max') == df['Projected Incremental']
+    return ['background-color: #d1e7dd; font-weight: bold' if v else '' for v in is_max]
 
+styled_df = summary_df.style.apply(highlight_max, axis=0, subset=['Projected Incremental'])
 
+st.dataframe(styled_df, use_container_width=True)
 
 # Prepare results table based on the filtered data (respecting recency selection)
 st.write("### Detailed Experiment Results Table")
